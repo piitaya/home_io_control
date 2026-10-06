@@ -859,6 +859,34 @@ TEST(HubOperations, RequestDeviceStatusAuthFailureBacksOffAggressively) {
       << "auth-shaped failures should increment their own streak";
 }
 
+TEST(HubOperations, ChallengeThenSilenceFromADeviceThatProvedTheKeyBacksOffLikeSilence) {
+  TestableComponent comp;
+  MockRadio radio;
+  setup_cover_component(comp, radio);
+
+  comp.set_device_status_poll_interval("ABC123", 2000);
+  comp.begin_status_poll_tracking_("ABC123", 2000);
+
+  auto *dev = comp.get_device("ABC123");
+  ASSERT_NE(dev, nullptr);
+  radio.queue_rx(test::make_rx_packet(build_status_response(comp.node_id_)));
+  ASSERT_TRUE(comp.request_device_status("ABC123"));
+  ASSERT_NE(dev->last_status, 0u) << "the device has now given us an authenticated status";
+
+  comp.begin_status_poll_tracking_("ABC123", 2000);
+  radio.queue_rx(test::make_rx_packet(build_challenge_request(dev->node_id, comp.node_id_)));
+  EXPECT_FALSE(comp.request_device_status("ABC123"));
+
+  uint32_t delay = comp.poll_policy_.get_next_update("ABC123") - esphome::millis();
+  EXPECT_TRUE(comp.exchange_engine_.get_debug().saw_challenge);
+  EXPECT_GE(delay, STATUS_RETRY_AFTER_FAIL_MS - 1000)
+      << "the key is proven, so a lost final reply takes the short silent-failure backoff";
+  EXPECT_LE(delay, STATUS_RETRY_AFTER_FAIL_MS + 1000)
+      << "not the 30 s auth backoff, which would keep the cover state stale";
+  EXPECT_EQ(comp.poll_policy_.get_auth_poll_failures("ABC123"), 0u);
+  EXPECT_EQ(comp.poll_policy_.get_status_poll_failures("ABC123"), 1u);
+}
+
 TEST(HubOperations, RequestDeviceStatusUnconfirmedAcceptStillReturnsFalse) {
   // ExchangeEngine now reports SUCCESS_UNCONFIRMED for a status poll that authenticated but never
   // got a final reply (Step 1's retry fix). execute_request_and_update_()'s

@@ -313,8 +313,12 @@ void IOHomeControlComponent::set_device_status_poll_interval(const std::string &
   this->poll_policy_.set_interval(device_id, poll_interval_ms);
 }
 
-void IOHomeControlComponent::schedule_background_poll_backoff_(const std::string &device_id, bool auth_like) {
+void IOHomeControlComponent::schedule_background_poll_backoff_(const std::string &device_id, bool saw_challenge) {
   uint32_t const now = millis();
+  // Only an authenticated status is applied (ADR 0022), so last_status != 0 proves the key.
+  const IoDevice *dev = this->registry_.get(device_id);
+  const bool auth_like =
+      decisions::failure_suggests_key_problem(saw_challenge, dev != nullptr && dev->last_status != 0);
   uint32_t const backoff_ms = this->poll_policy_.on_exchange_failed(device_id, auth_like, now);
   if (backoff_ms > 0) {
     ESP_LOGD(TAG,

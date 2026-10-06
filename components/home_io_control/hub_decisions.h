@@ -348,6 +348,15 @@ inline bool defer_background_poll_for_1w_activity(bool next_op_is_background, ui
   return (now - last_1w_activity_ms) < quiet_ms;
 }
 
+/// @brief Whether a failed exchange backs off as a possible key problem (the long auth ladder).
+///
+/// Challenge-then-silence can mean a wrong key or just a lost reply. Once the device has answered
+/// with our key, only the lost reply is left, so it backs off like a silent failure.
+/// @param saw_challenge True when the failed exchange saw a 0x3C from the device.
+/// @param key_proven True when the device has given this hub an authenticated status since boot.
+/// @return true to back off on the auth ladder, false for the silent-failure ladder.
+inline bool failure_suggests_key_problem(bool saw_challenge, bool key_proven) { return saw_challenge && !key_proven; }
+
 /// @brief Transmit-attempt budget for a scheduler-owned status poll, by backoff-ladder position.
 ///
 /// See SCHEDULED_POLL_MAX_TRIES and SCHEDULED_POLL_RETRY_GRACE_FIRST_FAILURE (proto_timing.h) for

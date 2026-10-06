@@ -978,8 +978,8 @@ class IOHomeControlComponent : public Component,
   void notify_device_update_(const std::string &id);
   /// Apply backoff after a failed background status poll and log the result.
   /// @param device_id Target device ID.
-  /// @param auth_like True when the failed exchange saw a 0x3C challenge.
-  void schedule_background_poll_backoff_(const std::string &device_id, bool auth_like);
+  /// @param saw_challenge True when the failed exchange saw a 0x3C challenge.
+  void schedule_background_poll_backoff_(const std::string &device_id, bool saw_challenge);
   /// Pop next pending operation from the queue and execute it (set position, request status, discover).
   void process_pending_operation_();
 

@@ -399,6 +399,19 @@ TEST(Decisions, DeferReleasesAtTheCapEvenMidBurst) {
 }
 
 // ============================================================================
+// Poll backoff ladder choice — failure_suggests_key_problem()
+// ============================================================================
+
+TEST(Decisions, ChallengeThenSilenceSuggestsAKeyProblemOnlyUntilTheKeyIsProven) {
+  EXPECT_TRUE(decisions::failure_suggests_key_problem(/*saw_challenge=*/true, /*key_proven=*/false))
+      << "a device that has never answered us and ends in silence after its challenge may not share our key";
+  EXPECT_FALSE(decisions::failure_suggests_key_problem(/*saw_challenge=*/true, /*key_proven=*/true))
+      << "a device that has already given us an authenticated status shares our key: the reply was lost";
+  EXPECT_FALSE(decisions::failure_suggests_key_problem(/*saw_challenge=*/false, /*key_proven=*/false));
+  EXPECT_FALSE(decisions::failure_suggests_key_problem(/*saw_challenge=*/false, /*key_proven=*/true));
+}
+
+// ============================================================================
 // Scheduled-poll retry budget — scheduled_poll_max_tries()
 // ============================================================================
 
