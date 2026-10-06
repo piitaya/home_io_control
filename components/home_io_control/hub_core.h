@@ -308,6 +308,9 @@ class IOHomeControlComponent : public Component,
   /// opted in.
   /// @param sender_id Node ID of the 1W sender (remote or sensor).
   void add_exposed_sender(const std::string &sender_id) { this->exposed_senders_.push_back(sender_id); }
+  /// Treat overheard exchanges between this hub's own node ID and a registered device as the
+  /// traffic of the hub it was cloned from (key extraction), and poll the device after them.
+  void set_follow_cloned_hub(bool follow) { this->follow_cloned_hub_ = follow; }
 
   /// Register a configured 1W controller identity (see oneway_controller.h). Called once per
   /// `oneway_controllers:` entry from generated code. Both the source address and the key are
@@ -815,6 +818,8 @@ class IOHomeControlComponent : public Component,
   /// @note Uses ESPHome's set_timeout() mechanism; the callback executes in loop().
   ///       A zero delay schedules immediately on the next loop iteration.
   void schedule_status_poll_(const std::string &device_id, uint32_t delay_ms);
+  /// Poll a device after overhearing an exchange between it and the hub this one was cloned from.
+  void note_cloned_hub_activity_(const IoFrame &frame);
   /// Begin bounded follow-up polling for a device after a command or overheard remote activity.
   /// @param device_id ID of the device to poll.
   /// @param initial_delay_ms Delay before the first follow-up poll.
@@ -1113,6 +1118,9 @@ class IOHomeControlComponent : public Component,
   /// 1W sender node IDs (remotes or sensors) allowed to fire the sender HA event
   /// (`add_exposed_sender`). Config-time list (populated once from YAML), not a per-frame allocation.
   std::vector<std::string> exposed_senders_;
+  bool follow_cloned_hub_{false};  ///< YAML `follow_cloned_hub` (see set_follow_cloned_hub()).
+  /// millis() when this hub's own last outbound exchange ended (see note_cloned_hub_activity_()).
+  uint32_t last_exchange_end_ms_{0};
   /// Invoked once after every pairing attempt completes; see set_pairing_result_callback().
   std::function<void()> pairing_result_callback_;
   /// Whether diagnostic probes (ManagementActions::probe_device()/probe_sweep()) are enabled.

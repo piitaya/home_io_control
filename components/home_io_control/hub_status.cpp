@@ -254,6 +254,35 @@ void IOHomeControlComponent::schedule_status_poll_(const std::string &device_id,
                     [this, device_id]() { this->queue_request_device_status(device_id); });
 }
 
+void IOHomeControlComponent::note_cloned_hub_activity_(const IoFrame &frame) {
+  // After key extraction this hub shares its node ID with the hub it was cloned from (a TaHoma),
+  // which keeps commanding the same devices. Opting in (`follow_cloned_hub`) asserts that a 2W
+  // frame between that address and one of our devices reaching this passive path is that other
+  // hub's exchange — ours are consumed by the exchange engine — rather than an echo of our own
+  // (the reason RemoteActivity ignores our address by default). One command from it puts about ten
+  // such frames on air (command copies, 0x3C/0x3D, follow-up 0x03 polls, the device's 0x04
+  // replies) across three channels, of which this hopping receiver catches only some, so react to
+  // whichever arrives. Re-arming the same per-device timer on each one polls the device once that
+  // hub has gone quiet.
+  if (!this->follow_cloned_hub_ || (frame.ctrl0 & CTRL0_PROTOCOL_1W) != 0)
+    return;
+  const bool from_us = memcmp(frame.src, this->node_id_, NODE_ID_SIZE) == 0;
+  const bool to_us = memcmp(frame.dst, this->node_id_, NODE_ID_SIZE) == 0;
+  if (from_us == to_us)
+    return;
+  // A reply addressed to us shortly after our own exchange is that exchange's late answer, not the
+  // other hub's: polling again on it would chase every late reply with another poll.
+  if (to_us && millis() - this->last_exchange_end_ms_ < OWN_EXCHANGE_LATE_REPLY_WINDOW_MS)
+    return;
+  const std::string device_id = node_id_to_string(from_us ? frame.dst : frame.src);
+  if (this->get_device(device_id) == nullptr)
+    return;
+  ESP_LOGD(detail::TAG, "rx cloned_hub_activity device=%s cmd=%s(0x%02X), scheduling status poll", device_id.c_str(),
+           command_name(frame.cmd), frame.cmd);
+  this->begin_status_poll_tracking_(device_id, 0);
+  this->schedule_status_poll_(device_id, REMOTE_ACTIVITY_STATUS_POLL_DELAY_MS);
+}
+
 void IOHomeControlComponent::schedule_device_polls_(const std::vector<std::string> &device_ids, uint32_t delay_ms) {
   for (const auto &device_id : device_ids) {
     this->begin_status_poll_tracking_(device_id, 0);
@@ -495,6 +524,8 @@ void IOHomeControlComponent::process_received_packet_(const RadioRxPacket &packe
   // predicate's entire domain, hub_decisions.h).
   if (this->key_extraction_.try_handle_frame(frame))
     return;
+
+  this->note_cloned_hub_activity_(frame);
 
   // Exchange-internal frames (0x3C challenge request, 0x3D challenge response) belonging to
   // *another* controller's authenticated exchange carry no extractable status data for a passive

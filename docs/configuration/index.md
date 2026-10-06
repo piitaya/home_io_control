@@ -63,6 +63,7 @@ home_io_control:
 - `exposed_senders` (Optional, default: empty list): List of 1W sender node IDs (6 hex characters each — remotes *or* sensors) allowed to fire the `esphome.home_io_control_sender_event` event to Home Assistant. Empty by default — see [Why this is opt-in](remotes.md#why-this-is-opt-in), and
   [Linked remotes](remotes.md#linked-remotes) for how this differs from `linked_remotes`.
 - `tuning` (Optional): Diagnostics block for pairing/radio parameters. See [Radio tuning](tuning.md).
+- `follow_cloned_hub` (Optional, default: `false`): For a hub whose `node_id`/`system_key` came from [key extraction](../key-extraction.md) while the original hub (a TaHoma, say) stays in service. Both then share one node ID, so the original hub's exchanges with your devices arrive from this hub's own address and are ignored by default. Set `true` to treat any overheard frame between that address and a registered device as the other hub's traffic and poll the device once it goes quiet, so entities follow moves commanded from the original hub's app or scenes.
 - `accept_foreign_pairing` (Optional, default: `false`): Adds a "Recover System Key" switch entity for pulling a device's system key from another controller. See [Key extraction](../key-extraction.md).
 - `scan_paired_devices_button` (Optional, default: `false`): Adds a "Scan Paired Devices" button entity — a one-tap trigger for the `scan_paired_devices` action. See
   [Scan Paired Devices](../pairing.md#scan-paired-devices).

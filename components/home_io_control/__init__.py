@@ -28,6 +28,7 @@ from .hub_names import (
     CONF_FEM,
     CONF_FEM_EN_PIN,
     CONF_FEM_PA_PIN,
+    CONF_FOLLOW_CLONED_HUB,
     CONF_LR1121_FIRMWARE_UPDATE,
     CONF_NODE_ID,
     CONF_ONEWAY_CONTROLLERS,
@@ -134,6 +135,7 @@ CONFIG_SCHEMA = cv.All(
             cv.Optional(CONF_EXPOSED_SENDERS, default=[]): cv.ensure_list(
                 validate_device_id
             ),
+            cv.Optional(CONF_FOLLOW_CLONED_HUB, default=False): cv.boolean,
             cv.Optional(CONF_ACCEPT_FOREIGN_PAIRING, default=False): cv.boolean,
             cv.Optional(CONF_RECOVER_ONEWAY_KEY, default=False): cv.boolean,
             cv.Optional(CONF_SCAN_PAIRED_DEVICES_BUTTON, default=False): cv.boolean,
@@ -219,6 +221,9 @@ async def to_code(config):
 
     for sender_id in config[CONF_EXPOSED_SENDERS]:
         cg.add(var.add_exposed_sender(sender_id))
+
+    if config[CONF_FOLLOW_CLONED_HUB]:
+        cg.add(var.set_follow_cloned_hub(True))
 
     for identity in config[CONF_ONEWAY_CONTROLLERS]:
         cg.add(

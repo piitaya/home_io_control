@@ -147,6 +147,10 @@ static constexpr uint8_t UNCONFIRMED_EXECUTE_MAX_RESENDS = 1;
 static constexpr uint32_t UNCONFIRMED_EXECUTE_RESEND_DELAY_MS = 750;
 static_assert(UNCONFIRMED_EXECUTE_RESEND_DELAY_MS >= EXCHANGE_RETRY_DELAY_MS,
               "the re-send gap extends the ordinary retry gap, it never shortens it");
+/// A frame addressed to this hub within this long after its own exchange ended is that exchange's
+/// late answer (a bioclimatic pergola's can trail our challenge answer by ~740 ms), not traffic
+/// from the hub it was cloned from. See IOHomeControlComponent::note_cloned_hub_activity_().
+static constexpr uint32_t OWN_EXCHANGE_LATE_REPLY_WINDOW_MS = 3000;
 
 /// How long evidence that a low-power receiver is moving keeps it believed awake enough to hear the
 /// short start preamble first. A moving VELUX solar receiver ignores the 1024-byte wake-up

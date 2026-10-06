@@ -142,6 +142,7 @@ class RxTestableComponent : public IOHomeControlComponent {
   using IOHomeControlComponent::op_queue_;
   using IOHomeControlComponent::poll_policy_;
   using IOHomeControlComponent::last_1w_activity_ms_;
+  using IOHomeControlComponent::last_exchange_end_ms_;
 };
 
 /// Build a RadioRxPacket from a constructed IoFrame.

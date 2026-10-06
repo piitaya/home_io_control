@@ -295,6 +295,7 @@ ExchangeOutcome IOHomeControlComponent::send_and_receive_(const IoFrame &request
   this->busy_ = true;
   ExchangeOutcome const outcome = this->exchange_engine_.send_and_receive(request, response, freq, max_tries);
   this->busy_ = false;
+  this->last_exchange_end_ms_ = millis();
   return outcome;
 }
 

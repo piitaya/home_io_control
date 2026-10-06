@@ -1488,3 +1488,77 @@ TEST(HubStatus, ReplyWithoutALastCommandRecordDoesNotRefreshRainEvidence) {
 
   EXPECT_EQ(dev->last_rain_evidence_ms, stamp);
 }
+
+// ============================================================================
+// follow_cloned_hub — traffic of the hub this one was cloned from (shared node ID)
+// ============================================================================
+
+namespace {
+
+/// A frame between our own node C0FFEE and registered device 054E17, in either direction.
+RadioRxPacket cloned_hub_packet(bool from_hub, uint8_t cmd) {
+  IoFrame f{};
+  init_frame(f, true, from_hub, false, false);
+  uint8_t own[3] = {0xC0, 0xFF, 0xEE};
+  uint8_t device[3] = {0x05, 0x4E, 0x17};
+  set_src(f, from_hub ? own : device);
+  set_dst(f, from_hub ? device : own);
+  uint8_t data[3] = {0x00, 0x00, 0x00};
+  set_cmd(f, cmd, data, sizeof(data));
+  return make_rx_packet(f);
+}
+
+}  // namespace
+
+TEST(HubStatus, ClonedHubTrafficIgnoredByDefault) {
+  RxTestableComponent comp;
+  MockRadio radio;
+  setup_rx_test_component(comp, radio);
+  const uint8_t device[3] = {0x05, 0x4E, 0x17};
+
+  comp.process_received_packet_(cloned_hub_packet(/*from_hub=*/true, CMD_EXECUTE));
+
+  EXPECT_NE(comp.last_timeout_id_, decisions::remote_poll_timer_id(device))
+      << "without follow_cloned_hub, our own address stays treated as an echo";
+}
+
+TEST(HubStatus, ClonedHubAnyFrameSchedulesStatusPoll) {
+  const uint8_t device[3] = {0x05, 0x4E, 0x17};
+  // Command copies, challenges and follow-up polls from it, and the device's replies to it.
+  const struct {
+    bool from_hub;
+    uint8_t cmd;
+  } frames[] = {{true, CMD_EXECUTE}, {true, CMD_PRIVATE}, {false, CMD_CHALLENGE_REQ}, {false, CMD_PRIVATE_RESP}};
+  for (const auto &frame : frames) {
+    RxTestableComponent comp;
+    MockRadio radio;
+    setup_rx_test_component(comp, radio);
+    comp.set_follow_cloned_hub(true);
+
+    comp.process_received_packet_(cloned_hub_packet(frame.from_hub, frame.cmd));
+
+    EXPECT_EQ(comp.last_timeout_id_, decisions::remote_poll_timer_id(device)) << "cmd 0x" << std::hex << +frame.cmd;
+    EXPECT_EQ(comp.last_timeout_ms_, REMOTE_ACTIVITY_STATUS_POLL_DELAY_MS);
+    EXPECT_TRUE(comp.poll_policy_.is_tracking_active("054E17", esphome::millis()));
+  }
+}
+
+TEST(HubStatus, ClonedHubLateReplyToOwnExchangeIgnored) {
+  esphome::test_clock::ManualClock clock;
+  esphome::test_clock::set_ms(50000);
+  RxTestableComponent comp;
+  MockRadio radio;
+  setup_rx_test_component(comp, radio);
+  comp.set_follow_cloned_hub(true);
+  comp.last_exchange_end_ms_ = esphome::test_clock::peek_ms();
+  const uint8_t device[3] = {0x05, 0x4E, 0x17};
+
+  esphome::test_clock::advance_ms(OWN_EXCHANGE_LATE_REPLY_WINDOW_MS - 1);
+  comp.process_received_packet_(cloned_hub_packet(/*from_hub=*/false, CMD_PRIVATE_RESP));
+  EXPECT_NE(comp.last_timeout_id_, decisions::remote_poll_timer_id(device))
+      << "a reply right after our own exchange answers it; polling on it would chase late replies";
+
+  esphome::test_clock::advance_ms(2);
+  comp.process_received_packet_(cloned_hub_packet(/*from_hub=*/false, CMD_PRIVATE_RESP));
+  EXPECT_EQ(comp.last_timeout_id_, decisions::remote_poll_timer_id(device)) << "past the window it is the other hub's";
+}
