@@ -229,7 +229,7 @@ TEST(HubStatus, SettlingDeviceWhoseConfirmingPollNeverComesBackIsAtRest) {
   comp.update_device_status_(make_status_reply(true, 0xC800, 0x6400));
   auto *dev = comp.get_device("ABC123");
   ASSERT_NE(dev, nullptr);
-  ASSERT_TRUE(detail::is_settling(*dev));
+  ASSERT_TRUE(is_settling(*dev));
   int notified = 0;
   comp.register_device_callback([&](const std::string &, const IoDevice &) { notified++; });
 
@@ -238,7 +238,7 @@ TEST(HubStatus, SettlingDeviceWhoseConfirmingPollNeverComesBackIsAtRest) {
   comp.settle_ended_status_tracking_();
 
   EXPECT_TRUE(dev->is_stopped);
-  EXPECT_FALSE(detail::is_settling(*dev));
+  EXPECT_FALSE(is_settling(*dev));
   EXPECT_EQ(notified, 1) << "the cover is told, so it goes idle";
 }
 
@@ -254,7 +254,7 @@ TEST(HubStatus, SettlingDeviceWhoseConfirmingPollFallsPastTheWindowIsAtRest) {
   comp.update_device_status_(make_status_reply(true, 0xC800, 0x6400));
   auto *dev = comp.get_device("ABC123");
   ASSERT_NE(dev, nullptr);
-  ASSERT_TRUE(detail::is_settling(*dev));
+  ASSERT_TRUE(is_settling(*dev));
 
   esphome::test_clock::advance_ms(61000);
   EXPECT_EQ(comp.poll_policy_.pop_due_device(esphome::millis()), std::nullopt) << "past the deadline: dropped";

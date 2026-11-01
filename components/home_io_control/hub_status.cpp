@@ -410,7 +410,7 @@ void IOHomeControlComponent::settle_ended_status_tracking_() {
     IoDevice *dev = this->registry_.get(*ended);
     if (dev == nullptr)
       continue;
-    if (detail::is_settling(*dev)) {
+    if (is_settling(*dev)) {
       // The device's own last word was "stopped"; nothing is left to confirm it.
       ESP_LOGD(detail::TAG, "Device %s: no poll left to confirm its stop at %.2f%%, target %.2f%%: taken as at rest",
                ended->c_str(), static_cast<double>(dev->position), static_cast<double>(dev->target));

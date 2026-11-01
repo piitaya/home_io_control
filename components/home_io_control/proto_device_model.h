@@ -598,6 +598,13 @@ inline float effective_tilt(const IoDevice &dev) {
   return dev.optimistic.tilt != UNKNOWN_POSITION ? dev.optimistic.tilt : dev.tilt;
 }
 
+/// @brief True while a device that reported stopped off its target waits for the confirming poll.
+///
+/// The hub handles it as moving until decisions::classify_stopped_report() confirms the stop; an
+/// entity shows no movement start on it (the device said it is stopped).
+/// @param dev Device record to read.
+inline bool is_settling(const IoDevice &dev) { return !dev.is_stopped && dev.stop_candidate.armed(); }
+
 /// @brief Whether a consumer should treat the device as at rest, prediction first.
 /// @param dev Device record to read.
 /// @return The predicted movement state when one stands, otherwise `dev.is_stopped`.

@@ -747,6 +747,63 @@ TEST(PlatformCover, DeviceAtRestOffItsTargetIsIdle) {
   EXPECT_NEAR(cover.position, 0.97f, 1e-6f) << "the reported position is shown (whole percent), not rounded to the end";
 }
 
+TEST(PlatformCover, SettlingCoverShownAtRestStaysIdle) {
+  // A poll after another controller's finished move finds the cover stopped a little short of its
+  // target. The hub waits for one more report to confirm the stop (is_settling()); the entity must
+  // not show that wait as a movement.
+  MockHub hub;
+  TestableCover cover;
+  cover.set_parent(&hub);
+  cover.set_device_id("ABC123");
+
+  cover.setup();
+
+  IoDevice at_rest{};
+  at_rest.position = 40.0f;
+  at_rest.target = 40.0f;
+  at_rest.is_stopped = true;
+  hub.trigger_device_update("ABC123", at_rest);
+  ASSERT_EQ(cover.current_operation, COVER_OPERATION_IDLE);
+
+  IoDevice settling{};
+  settling.position = 63.0f;
+  settling.target = 64.0f;
+  settling.is_stopped = false;
+  settling.stop_candidate.target = 64.0f;
+  settling.stop_candidate.position = 63.0f;
+  ASSERT_TRUE(is_settling(settling));
+  hub.trigger_device_update("ABC123", settling);
+
+  EXPECT_EQ(cover.current_operation, COVER_OPERATION_IDLE);
+  EXPECT_NEAR(cover.position, 0.37f, 1e-6f) << "the new position is shown at once";
+}
+
+TEST(PlatformCover, SettlingCoverShownMovingKeepsMoving) {
+  MockHub hub;
+  TestableCover cover;
+  cover.set_parent(&hub);
+  cover.set_device_id("ABC123");
+
+  cover.setup();
+
+  IoDevice moving{};
+  moving.position = 50.0f;
+  moving.target = 64.0f;
+  moving.is_stopped = false;
+  hub.trigger_device_update("ABC123", moving);
+  ASSERT_EQ(cover.current_operation, COVER_OPERATION_CLOSING);
+
+  IoDevice settling{};
+  settling.position = 63.0f;
+  settling.target = 64.0f;
+  settling.is_stopped = false;
+  settling.stop_candidate.target = 64.0f;
+  settling.stop_candidate.position = 63.0f;
+  hub.trigger_device_update("ABC123", settling);
+
+  EXPECT_EQ(cover.current_operation, COVER_OPERATION_CLOSING) << "the move ends when the stop is confirmed";
+}
+
 TEST(PlatformCover, UnknownPositionNotPublished) {
   MockHub hub;
   TestableCover cover;

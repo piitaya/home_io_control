@@ -183,6 +183,11 @@ void IOHomeCover::on_device_update_(const std::string &id, const IoDevice &dev) 
   // Determine movement direction for the HA UI animation
   if (eff_stopped) {
     this->current_operation = cover::COVER_OPERATION_IDLE;
+  } else if (is_settling(dev)) {
+    // The device reported stopped off its target and the hub waits for one more poll to confirm it
+    // (classify_stopped_report()). That report is no movement: a cover shown at rest stays at rest,
+    // say after a poll that follows another controller's finished move, and a cover shown moving
+    // keeps moving until the confirmation.
   } else if (eff_target != UNKNOWN_POSITION && dev.position != UNKNOWN_POSITION && eff_target != dev.position) {
     // Travelling toward a target we can see, from a position we can see.
     this->current_operation = operation_toward(invert, dev.position, eff_target);

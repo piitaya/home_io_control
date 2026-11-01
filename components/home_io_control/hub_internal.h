@@ -453,12 +453,6 @@ inline std::string describe_battery(const IoDevice &dev) {
   return std::string(" battery=") + battery_state_name(dev.battery);
 }
 
-/// @brief True while a device that reported stopped off its target waits for the confirming poll.
-///
-/// The hub handles it as moving until decisions::classify_stopped_report() confirms the stop.
-/// @param dev Device record to read.
-inline bool is_settling(const IoDevice &dev) { return !dev.is_stopped && dev.stop_candidate.armed(); }
-
 /// @brief True when the remembered off-target stop is the device's last trusted report.
 ///
 /// Then the gap between `dev.target` and `dev.position` is a rest the hub has seen reported, not a

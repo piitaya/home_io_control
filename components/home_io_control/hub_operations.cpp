@@ -235,7 +235,7 @@ IOHomeControlComponent::RequestResult IOHomeControlComponent::exchange_and_recor
       // and a poll that already had several tries keeps the ladder.
       const IoDevice *dev = this->registry_.get(device_id);
       const bool device_moving = request.cmd == CMD_PRIVATE && options.max_tries == SCHEDULED_POLL_MAX_TRIES &&
-                                 dev != nullptr && !effective_is_stopped(*dev) && !detail::is_settling(*dev) &&
+                                 dev != nullptr && !effective_is_stopped(*dev) && !is_settling(*dev) &&
                                  !device_has_no_motion(dev->type, dev->subtype);
       this->schedule_background_poll_backoff_(device_id, dbg.saw_challenge, device_moving);
     }
