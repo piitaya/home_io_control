@@ -137,8 +137,11 @@ struct PollTracking {
 
 /// @brief What an overheard frame of another controller is.
 enum class ForeignFrameKind : uint8_t {
-  REQUEST_TO_DEVICE,         ///< Another controller's command to a registered device.
-  DEVICE_CHALLENGE_TO_OTHER  ///< A registered device's challenge (0x3C) addressed to another controller.
+  REQUEST_TO_DEVICE,          ///< Another controller's command to a registered device.
+  DEVICE_CHALLENGE_TO_OTHER,  ///< A registered device's challenge (0x3C) addressed to another controller.
+  /// A registered device's reply (0x04) to the hub this one was cloned from (`follow_cloned_hub`).
+  /// Decided like a challenge: the request it answers was missed unless a read was heard just before.
+  DEVICE_REPLY_TO_OTHER
 };
 
 /// @brief What the hub does about an overheard foreign frame.
@@ -250,13 +253,13 @@ class StatusPollPolicy {
   /// Order: a pending foreign-armed poll answers first (PUSH_PENDING for any frame, timer pushed
   /// out); a request that writes ARMs; any other request ARMs only when neither @p last_status_ms
   /// nor the last read-triggered poll is younger than FOREIGN_READ_RESYNC_MS (0 = never, so the first
-  /// read polls); a challenge is IGNOREd when the last request heard from the same controller was
-  /// within FOREIGN_CHALLENGE_AFTER_REQUEST_MS and not a write, otherwise it ARMs. Every request
-  /// updates the last-request record; a challenge does not. ARM and PUSH_PENDING set the pending due
-  /// time; an ARM from a read stamps the read-poll time.
+  /// read polls); a challenge or a reply is IGNOREd when the last request heard from the same
+  /// controller was within FOREIGN_CHALLENGE_AFTER_REQUEST_MS and not a write, otherwise it ARMs.
+  /// Every request updates the last-request record; a challenge or a reply does not. ARM and
+  /// PUSH_PENDING set the pending due time; an ARM from a read stamps the read-poll time.
   /// @param device_id Registered device the frame concerns.
-  /// @param kind Request to the device, or the device's challenge to another controller.
-  /// @param controller The other controller: the request's source, or the challenge's destination.
+  /// @param kind Request to the device, or the device's challenge or reply to another controller.
+  /// @param controller The other controller: the request's source, or the challenge's or reply's destination.
   /// @param cmd Command of the frame.
   /// @param now Current millis().
   /// @param last_status_ms millis() of the device's last authenticated status; 0 = never.

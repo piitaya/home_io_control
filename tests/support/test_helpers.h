@@ -143,6 +143,7 @@ class TestableHubComponent : public IOHomeControlComponent {
   using IOHomeControlComponent::api_rename_device_;
   using IOHomeControlComponent::register_management_actions_;
   using IOHomeControlComponent::last_1w_activity_ms_;
+  using IOHomeControlComponent::last_exchange_end_ms_;
   using IOHomeControlComponent::first_1w_activity_ms_;
   using IOHomeControlComponent::defer_background_poll_;
 #ifdef IOHOME_LR1121_FIRMWARE_UPDATE
@@ -170,6 +171,7 @@ class RxTestableComponent : public IOHomeControlComponent {
   using IOHomeControlComponent::op_queue_;
   using IOHomeControlComponent::poll_policy_;
   using IOHomeControlComponent::last_1w_activity_ms_;
+  using IOHomeControlComponent::last_exchange_end_ms_;
 };
 
 /// Build a RadioRxPacket from a constructed IoFrame.

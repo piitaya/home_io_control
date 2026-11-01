@@ -75,6 +75,10 @@ The switch always boots off (`restore_mode: ALWAYS_OFF`), so a reboot can never 
 - **Your existing hub now lists a device that will never answer it.** After a successful run the
   hub believes it added a new actuator and may show one in its app. Nothing here can remove that
   entry from the hub's side; delete it through the hub's own app when you are done.
+- **Moves from your existing hub are ignored by default.** This hub now shares its node ID, so the
+  existing hub's exchanges with your devices look like this hub's own and never trigger a status
+  poll. If you keep using it, set `follow_cloned_hub: true` — see
+  [Configuration](configuration/index.md).
 
 ## See also
 

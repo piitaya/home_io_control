@@ -220,8 +220,8 @@ ForeignAction StatusPollPolicy::on_foreign_frame(const std::string &device_id, F
         f.last_read_poll_ms = stamp(now);
     }
   } else {
-    // A challenge answers the request just before it: ignore it only when that request, from this
-    // same controller, was a read.
+    // A challenge or a reply answers the request just before it: ignore it only when that request,
+    // from this same controller, was a read.
     const bool follows_read = before.last_request_ms != 0 && before.last_request_from == controller &&
                               now - before.last_request_ms <= FOREIGN_CHALLENGE_AFTER_REQUEST_MS &&
                               !decisions::overheard_command_writes(before.last_request_cmd);

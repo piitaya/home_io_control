@@ -2775,3 +2775,98 @@ TEST(HubStatus, DeviceEventInsideAPollExchangeTwiceCountsAsUnanswered) {
   EXPECT_FLOAT_EQ(dev->target, 42.0F);
   EXPECT_TRUE(dev->is_stopped);
 }
+
+// ============================================================================
+// follow_cloned_hub: the hub this one was cloned from shares its node ID (key extraction)
+// ============================================================================
+
+namespace {
+
+constexpr uint8_t OWN_NODE[3] = {0xC0, 0xFF, 0xEE};  ///< This hub's node ID, shared with the cloned hub.
+
+}  // namespace
+
+TEST(HubStatusClonedHub, ItsTrafficIsAnEchoByDefault) {
+  ForeignTrafficRig r;
+  r.hear(OWN_NODE, FOREIGN_DEVICE, CMD_EXECUTE);
+  r.hear(FOREIGN_DEVICE, OWN_NODE, CMD_PRIVATE_RESP);
+  r.device_challenges(OWN_NODE);
+  EXPECT_EQ(r.polls_until(FOREIGN_T0 + 5000), 0u);
+  EXPECT_EQ(r.comp.poll_policy_.get_poll_deadline("054E17"), 0u);
+}
+
+TEST(HubStatusClonedHub, AnExecuteFromItPolls) {
+  ForeignTrafficRig r;
+  r.comp.set_follow_cloned_hub(true);
+  r.comp.get_device("054E17")->last_status = esphome::millis();
+  r.hear(OWN_NODE, FOREIGN_DEVICE, CMD_EXECUTE);
+  EXPECT_EQ(r.polls_until(FOREIGN_T0 + 2000), 1u);
+}
+
+TEST(HubStatusClonedHub, AReadFromItFollowsTheTenMinuteRule) {
+  ForeignTrafficRig r;
+  r.comp.set_follow_cloned_hub(true);
+  r.hear(OWN_NODE, FOREIGN_DEVICE, CMD_PRIVATE);
+  EXPECT_EQ(r.polls_until(FOREIGN_T0 + 2000), 1u);
+  r.hear(OWN_NODE, FOREIGN_DEVICE, CMD_PRIVATE);
+  EXPECT_EQ(r.polls_until(FOREIGN_T0 + 60000), 0u);
+}
+
+TEST(HubStatusClonedHub, AChallengeToItWhoseRequestWasMissedPolls) {
+  ForeignTrafficRig r;
+  r.comp.set_follow_cloned_hub(true);
+  r.comp.get_device("054E17")->last_status = esphome::millis();
+  r.device_challenges(OWN_NODE);
+  EXPECT_EQ(r.polls_until(FOREIGN_T0 + 2000), 1u);
+}
+
+TEST(HubStatusClonedHub, AReplyToItWhoseRequestWasMissedPollsWithoutApplyingIt) {
+  ForeignTrafficRig r;
+  r.comp.set_follow_cloned_hub(true);
+  IoDevice *dev = r.comp.get_device("054E17");
+  dev->last_status = esphome::millis();
+  const uint32_t last_status = dev->last_status;
+  esphome::test_clock::advance_ms(10);
+  r.hear(FOREIGN_DEVICE, OWN_NODE, CMD_PRIVATE_RESP);
+  EXPECT_EQ(dev->last_status, last_status) << "an unauthenticated reply is never applied (ADR 0022)";
+  EXPECT_EQ(r.polls_until(FOREIGN_T0 + 2010), 1u);
+}
+
+TEST(HubStatusClonedHub, RepliesDuringItsMovePushOnePollOut) {
+  // While it moves a device, the cloned hub reads it every few seconds; the hopping receiver may
+  // hear only some of the replies. Each one pushes the pending poll out, so one poll follows them.
+  ForeignTrafficRig r;
+  r.comp.set_follow_cloned_hub(true);
+  r.hear(FOREIGN_DEVICE, OWN_NODE, CMD_PRIVATE_RESP);
+  EXPECT_EQ(r.polls_until(FOREIGN_T0 + 1500), 0u);
+  r.hear(FOREIGN_DEVICE, OWN_NODE, CMD_PRIVATE_RESP);
+  EXPECT_EQ(r.polls_until(FOREIGN_T0 + 3499), 0u);
+  EXPECT_EQ(r.polls_until(FOREIGN_T0 + 3500), 1u);
+}
+
+TEST(HubStatusClonedHub, AReplyToAHeardReadDoesNotPoll) {
+  ForeignTrafficRig r;
+  r.comp.set_follow_cloned_hub(true);
+  r.comp.get_device("054E17")->last_status = esphome::millis();
+  r.hear(OWN_NODE, FOREIGN_DEVICE, CMD_PRIVATE);
+  esphome::test_clock::advance_ms(5);
+  r.hear(FOREIGN_DEVICE, OWN_NODE, CMD_PRIVATE_RESP);
+  EXPECT_EQ(r.polls_until(FOREIGN_T0 + 5000), 0u);
+  EXPECT_EQ(r.comp.poll_policy_.get_poll_deadline("054E17"), 0u) << "no tracking was begun";
+}
+
+TEST(HubStatusClonedHub, ALateReplyToThisHubsOwnExchangeIsIgnored) {
+  ForeignTrafficRig r;
+  r.comp.set_follow_cloned_hub(true);
+  r.comp.last_exchange_end_ms_ = esphome::millis();
+  esphome::test_clock::advance_ms(OWN_EXCHANGE_LATE_REPLY_WINDOW_MS - 1);
+  r.hear(FOREIGN_DEVICE, OWN_NODE, CMD_PRIVATE_RESP);
+  r.device_challenges(OWN_NODE);
+  EXPECT_EQ(r.polls_until(esphome::millis() + 5000), 0u)
+      << "a reply right after our own exchange answers it; polling on it would chase late replies";
+
+  r.comp.last_exchange_end_ms_ = esphome::millis();
+  esphome::test_clock::advance_ms(OWN_EXCHANGE_LATE_REPLY_WINDOW_MS);
+  r.hear(FOREIGN_DEVICE, OWN_NODE, CMD_PRIVATE_RESP);
+  EXPECT_EQ(r.polls_until(esphome::millis() + 2000), 1u) << "past the window it is the cloned hub's";
+}

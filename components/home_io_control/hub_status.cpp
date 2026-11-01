@@ -475,6 +475,7 @@ void IOHomeControlComponent::act_on_foreign_frame_(const std::string &device_id,
     return;
   const uint32_t now = millis();
   const char *what = kind == ForeignFrameKind::DEVICE_CHALLENGE_TO_OTHER ? "challenge" : command_name(cmd);
+  const bool answers_request = kind != ForeignFrameKind::REQUEST_TO_DEVICE;
   switch (this->poll_policy_.on_foreign_frame(device_id, kind, controller, cmd, now, dev->last_status)) {
     case ForeignAction::ARM:
       ESP_LOGD(detail::TAG, "rx remote_activity device=%s controller=%s %s(0x%02X): scheduling status poll",
@@ -490,9 +491,7 @@ void IOHomeControlComponent::act_on_foreign_frame_(const std::string &device_id,
     case ForeignAction::IGNORE:
       ESP_LOGD(detail::TAG, "rx remote_activity device=%s controller=%s %s(0x%02X): %s, no poll", device_id.c_str(),
                controller.c_str(), what, cmd,
-               kind == ForeignFrameKind::DEVICE_CHALLENGE_TO_OTHER
-                   ? "answers a heard read"
-                   : "a read, and the device was read in the last 10 min");
+               answers_request ? "answers a heard read" : "a read, and the device was read in the last 10 min");
       break;
   }
 }
@@ -500,7 +499,9 @@ void IOHomeControlComponent::act_on_foreign_frame_(const std::string &device_id,
 void IOHomeControlComponent::note_foreign_challenge_(const IoFrame &frame) {
   // A registered device challenging another controller: a write whose request frame was missed
   // looks exactly like this, so the policy decides whether it warrants a poll.
-  if (frame.cmd != CMD_CHALLENGE_REQ || memcmp(frame.dst, this->node_id_, NODE_ID_SIZE) == 0)
+  if (frame.cmd != CMD_CHALLENGE_REQ)
+    return;
+  if (memcmp(frame.dst, this->node_id_, NODE_ID_SIZE) == 0 && !this->is_cloned_hub_reply_(frame))
     return;
   const std::string challenger = node_id_to_string(frame.src);
   if (this->get_device(challenger) == nullptr)
@@ -509,11 +510,32 @@ void IOHomeControlComponent::note_foreign_challenge_(const IoFrame &frame) {
                               frame.cmd);
 }
 
+void IOHomeControlComponent::note_cloned_hub_reply_(const IoFrame &frame) {
+  // The hub this one was cloned from shares our node ID, so the device's replies to its exchanges
+  // are addressed to us. A receiver hopping across three channels often hears such a reply but not
+  // the request it answers, so the reply is decided on like a challenge: a poll, unless it answers
+  // a read heard just before.
+  if (frame.cmd != CMD_PRIVATE_RESP || !this->is_cloned_hub_reply_(frame))
+    return;
+  const std::string device_id = node_id_to_string(frame.src);
+  if (this->get_device(device_id) == nullptr)
+    return;
+  this->act_on_foreign_frame_(device_id, ForeignFrameKind::DEVICE_REPLY_TO_OTHER, node_id_to_string(frame.dst),
+                              frame.cmd);
+}
+
+bool IOHomeControlComponent::is_cloned_hub_reply_(const IoFrame &frame) const {
+  return this->follow_cloned_hub_ && memcmp(frame.dst, this->node_id_, NODE_ID_SIZE) == 0 &&
+         millis() - this->last_exchange_end_ms_ >= OWN_EXCHANGE_LATE_REPLY_WINDOW_MS;
+}
+
 bool IOHomeControlComponent::act_on_overheard_request_(const IoFrame &frame) {
   // Another controller's frame to a registered device (e.g. a gateway commanding a shutter we also
-  // control). Our own frames are never foreign.
+  // control). Our own frames are never foreign, unless `follow_cloned_hub` says the hub this one was
+  // cloned from sent it: this hub's own requests are consumed by its exchanges and never reach here.
   const std::string dst_id = node_id_to_string(frame.dst);
-  if (this->get_device(dst_id) != nullptr && memcmp(frame.src, this->node_id_, NODE_ID_SIZE) != 0) {
+  const bool from_us = memcmp(frame.src, this->node_id_, NODE_ID_SIZE) == 0;
+  if (this->get_device(dst_id) != nullptr && (!from_us || this->follow_cloned_hub_)) {
     this->act_on_foreign_frame_(dst_id, ForeignFrameKind::REQUEST_TO_DEVICE, node_id_to_string(frame.src), frame.cmd);
     return true;
   }
@@ -930,6 +952,7 @@ void IOHomeControlComponent::process_received_packet_(const RadioRxPacket &packe
     // the frame's source currently holds the system key, so its content is never applied -- see
     // ADR 0022. State goes stale until this hub's own next authenticated poll corrects it.
     detail::log_frame_issue(this, "rx", "unauthenticated_status_ignored", frame, packet.len);
+    this->note_cloned_hub_reply_(frame);
     return;
   }
 

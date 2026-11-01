@@ -321,6 +321,10 @@ class IOHomeControlComponent : public Component,
   /// opted in.
   /// @param sender_id Node ID of the 1W sender (remote or sensor).
   void add_exposed_sender(const std::string &sender_id) { this->exposed_senders_.push_back(sender_id); }
+  /// Treat overheard exchanges between this hub's own node ID and a registered device as the
+  /// traffic of the hub it was cloned from (key extraction), and decide on a poll as for any other
+  /// controller (act_on_foreign_frame_()). Off by default: our own address is otherwise an echo.
+  void set_follow_cloned_hub(bool follow) { this->follow_cloned_hub_ = follow; }
 
   /// Register a configured 1W controller identity (see oneway_controller.h). Called once per
   /// `oneway_controllers:` entry from generated code. Both the source address and the key are
@@ -992,15 +996,24 @@ class IOHomeControlComponent : public Component,
   /// while such a poll is pending the frame only pushes its timer out. A frame that arms nothing
   /// changes neither the tracking window nor the failure streaks.
   /// @param device_id Registered device the frame concerns.
-  /// @param kind Request to the device, or the device's challenge to another controller.
-  /// @param controller The other controller's node ID (request source, or challenge destination).
+  /// @param kind Request to the device, or the device's challenge or reply to another controller.
+  /// @param controller The other controller's node ID (request source, or challenge or reply destination).
   /// @param cmd Command of the heard frame.
   void act_on_foreign_frame_(const std::string &device_id, ForeignFrameKind kind, const std::string &controller,
                              uint8_t cmd);
   /// Hand a registered device's challenge (0x3C) to another controller to act_on_foreign_frame_().
-  /// A challenge addressed to this hub, from an unregistered node, or a 0x3D is left alone.
+  /// A challenge addressed to this hub (unless it is_cloned_hub_reply_()), from an unregistered
+  /// node, or a 0x3D is left alone.
   /// @param frame An exchange-internal frame (is_exchange_internal_command()).
   void note_foreign_challenge_(const IoFrame &frame);
+  /// Hand a registered device's 0x04 reply to the hub this one was cloned from to
+  /// act_on_foreign_frame_(). Its content is never applied (ADR 0022).
+  /// @param frame An overheard, unauthenticated status reply.
+  void note_cloned_hub_reply_(const IoFrame &frame);
+  /// With `follow_cloned_hub`, whether a frame addressed to this hub's node ID belongs to the hub it
+  /// was cloned from: it does unless it arrives within OWN_EXCHANGE_LATE_REPLY_WINDOW_MS of this
+  /// hub's own last exchange, where it is that exchange's late reply.
+  [[nodiscard]] bool is_cloned_hub_reply_(const IoFrame &frame) const;
   /// Hand another controller's frame to act_on_foreign_frame_(): per the registered device it is
   /// addressed to, or per device linked to its source when that is a linked 2W controller.
   /// @param frame A parsed 2W frame that is not a status reply.
@@ -1332,6 +1345,9 @@ class IOHomeControlComponent : public Component,
   /// 1W sender node IDs (remotes or sensors) allowed to fire the sender HA event
   /// (`add_exposed_sender`). Config-time list (populated once from YAML), not a per-frame allocation.
   std::vector<std::string> exposed_senders_;
+  bool follow_cloned_hub_{false};  ///< YAML `follow_cloned_hub` (see set_follow_cloned_hub()).
+  /// millis() when this hub's own last outbound exchange ended (see is_cloned_hub_reply_()).
+  uint32_t last_exchange_end_ms_{0};
   /// Invoked once after every pairing attempt completes; see set_pairing_result_callback().
   std::function<void()> pairing_result_callback_;
   /// Device events recorded since boot, the last one's text and its subscriber; see record_device_event_().
